@@ -1,86 +1,108 @@
-import math
-
-def calculate_heating_load(data):
-    # Simple heating load
-    q_walls = data['u_walls'] * data['area_walls'] * (data['t_indoor'] - data['t_outdoor'])
-    q_windows = data['u_windows'] * data['area_windows'] * (data['t_indoor'] - data['t_outdoor'])
-    q_roof = data['u_roof'] * data['area_roof'] * (data['t_indoor'] - data['t_outdoor'])
-    q_conduction = q_walls + q_windows + q_roof
-
-    cfm = (data['volume'] * data['ach']) / 60
-    q_infil = 1.08 * cfm * (data['t_indoor'] - data['t_outdoor'])
-
-    total = q_conduction + q_infil
-    return {
-        'total_btu_hr': round(total),
-        'cfm': round(cfm, 1)
-    }
-
-
-def calculate_cooling_load(data):
-    # Simple cooling load
-    q_walls = data['u_walls'] * data['area_walls'] * 25
-    q_roof = data['u_roof'] * data['area_roof'] * 40
-    q_windows = data['u_windows'] * data['area_windows'] * 12
-    q_solar = data['area_windows'] * 140   # simplified
-
-    cfm = (data['volume'] * data.get('ach', 0.5)) / 60
-    q_inf_s = 1.08 * cfm * (data['t_outdoor'] - data['t_indoor'])
-    q_inf_l = 0.68 * cfm * 30
-
-    q_people = data.get('occupants', 0) * 380
-    q_lights = data.get('lighting_watts', 0) * 3.41
-
-    sensible = q_walls + q_roof + q_windows + q_solar + q_inf_s + q_people + q_lights
-    latent = q_inf_l
-    total = sensible + latent
-
-    return {
-        'total_btu_hr': round(total),
-        'tons': round(total / 12000, 2),
-        'cfm': round(sensible / (1.08 * 20))
-    }
 from fpdf import FPDF
 from datetime import datetime
 
+def calculate_heating_load(data: dict) -> dict:
+    """Simple Heating Load Calculation"""
+    # Conduction losses
+    q_walls = data.get('u_walls', 0.06) * data.get('area_walls', 0) * (data['t_indoor'] - data['t_outdoor'])
+    q_windows = data.get('u_windows', 0.35) * data.get('area_windows', 0) * (data['t_indoor'] - data['t_outdoor'])
+    q_roof = data.get('u_roof', 0.04) * data.get('area_roof', 0) * (data['t_indoor'] - data['t_outdoor'])
+    q_conduction = q_walls + q_windows + q_roof
+
+    # Infiltration
+    cfm = (data.get('volume', 0) * data.get('ach', 0.5)) / 60
+    q_infil = 1.08 * cfm * (data['t_indoor'] - data['t_outdoor'])
+
+    total_btu = q_conduction + q_infil
+
+    return {
+        'total_btu_hr': round(total_btu),
+        'cfm': round(cfm, 1),
+        'breakdown': {
+            'conduction': round(q_conduction),
+            'infiltration': round(q_infil)
+        }
+    }
+
+
+def calculate_cooling_load(data: dict) -> dict:
+    """Simple Cooling Load Calculation (CLTD style)"""
+    # Conduction
+    q_walls = data.get('u_walls', 0.06) * data.get('area_walls', 0) * 25
+    q_roof = data.get('u_roof', 0.04) * data.get('area_roof', 0) * 40
+    q_windows = data.get('u_windows', 0.35) * data.get('area_windows', 0) * 12
+
+    # Solar gain through windows
+    q_solar = data.get('area_windows', 0) * 140
+
+    # Infiltration
+    cfm = (data.get('volume', 0) * data.get('ach', 0.5)) / 60
+    delta_t = data['t_outdoor'] - data['t_indoor']
+    q_inf_sensible = 1.08 * cfm * delta_t
+    q_inf_latent = 0.68 * cfm * 30
+
+    # Internal gains
+    q_people = data.get('occupants', 0) * 380
+    q_lights = data.get('lighting_watts', 0) * 3.41
+
+    sensible = q_walls + q_roof + q_windows + q_solar + q_inf_sensible + q_people + q_lights
+    latent = q_inf_latent
+    total_btu = sensible + latent
+
+    return {
+        'total_btu_hr': round(total_btu),
+        'tons': round(total_btu / 12000, 2),
+        'cfm': round(sensible / (1.08 * 20)),
+        'sensible': round(sensible),
+        'latent': round(latent)
+    }
+
+
 def generate_pdf_report(data: dict, result: dict, mode: str) -> str:
+    """Generate professional PDF report"""
     pdf = FPDF()
     pdf.add_page()
+    
+    # Header
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "HVAC Load Calculation Report", ln=True, align="C")
-    pdf.ln(10)
-
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
-    pdf.cell(0, 8, f"Mode: {mode}", ln=True)
+    pdf.cell(0, 10, "HVAC LOAD CALCULATION REPORT", ln=True, align="C")
     pdf.ln(5)
-
-    # Input Summary
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 8, "Input Data:", ln=True)
+    
     pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 8, f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+    pdf.cell(0, 8, f"Calculation Type: {mode}", ln=True)
+    pdf.ln(8)
+
+    # Input Data
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "INPUT PARAMETERS", ln=True)
+    pdf.set_font("Arial", "", 11)
+    
     for key, value in data.items():
-        if key not in ['mode']:
-            pdf.cell(0, 6, f"• {key.replace('_', ' ').title()}: {value}", ln=True)
+        if key != "mode":
+            nice_key = key.replace('_', ' ').title()
+            pdf.cell(0, 6, f"• {nice_key}: {value}", ln=True)
+    
     pdf.ln(8)
 
     # Results
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 8, "Results:", ln=True)
+    pdf.cell(0, 8, "RESULTS", ln=True)
     pdf.set_font("Arial", "", 11)
 
     if "Heating" in mode:
-        pdf.cell(0, 6, f"Total Heating Load: {result['total_btu_hr']} BTU/hr", ln=True)
-        pdf.cell(0, 6, f"Recommended Airflow: {result['cfm']} CFM", ln=True)
+        pdf.cell(0, 8, f"Total Heating Load : {result['total_btu_hr']} BTU/hr", ln=True)
+        pdf.cell(0, 8, f"Recommended Airflow : {result['cfm']} CFM", ln=True)
     else:
-        pdf.cell(0, 6, f"Total Cooling Load: {result['total_btu_hr']} BTU/hr", ln=True)
-        pdf.cell(0, 6, f"Tons: {result['tons']} Tons", ln=True)
-        pdf.cell(0, 6, f"Supply Airflow: {result['cfm']} CFM", ln=True)
+        pdf.cell(0, 8, f"Total Cooling Load : {result['total_btu_hr']} BTU/hr", ln=True)
+        pdf.cell(0, 8, f"Capacity           : {result['tons']} Tons", ln=True)
+        pdf.cell(0, 8, f"Supply Airflow     : {result['cfm']} CFM", ln=True)
 
-    pdf.ln(10)
+    pdf.ln(15)
     pdf.set_font("Arial", "I", 10)
     pdf.cell(0, 8, "Generated by HVAC Telegram Bot", ln=True, align="C")
 
-    filename = f"hvac_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    # Save file
+    filename = f"hvac_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     pdf.output(filename)
     return filename

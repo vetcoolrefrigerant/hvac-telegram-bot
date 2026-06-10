@@ -2,24 +2,22 @@ import os
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
-from hvac_calculator import calculate_heating_load, calculate_cooling_load
+from hvac_calculator import calculate_heating_load, calculate_cooling_load, generate_pdf_report
 
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Conversation States
+# States
 MODE, INDOOR_TEMP, OUTDOOR_TEMP, AREA_WALLS, U_WALLS, AREA_WINDOWS, U_WINDOWS, \
 AREA_ROOF, U_ROOF, VOLUME, ACH, OCCUPANTS = range(12)
 
-# Common keyboard options
 U_VALUE_KEYBOARD = [["0.04", "0.06", "0.08"], ["0.12", "0.25", "0.35"]]
 ACH_KEYBOARD = [["0.3", "0.5", "0.8"], ["1.0", "1.5"]]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["🔥 Heating Load", "❄️ Cooling Load"]]
     await update.message.reply_text(
-        "👋 **Welcome to HVAC Load Calculator!**\n\n"
-        "Choose calculation type:",
+        "👋 **Welcome to HVAC Load Calculator!**\n\nChoose mode:",
         reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True),
         parse_mode='Markdown'
     )
@@ -28,19 +26,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def mode_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data['mode'] = update.message.text
-    await update.message.reply_text(
-        "🏠 Indoor design temperature (°F)?\nExample: 75",
-        reply_markup=ReplyKeyboardRemove()
-    )
+    await update.message.reply_text("🏠 Indoor design temperature (°F)?\nExample: 75", reply_markup=ReplyKeyboardRemove())
     return INDOOR_TEMP
 
 async def indoor_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         context.user_data['t_indoor'] = float(update.message.text)
-        await update.message.reply_text("🌡️ Outdoor temperature (°F)?\nExample: 95 (summer) or 20 (winter)")
+        await update.message.reply_text("🌡️ Outdoor temperature (°F)?")
         return OUTDOOR_TEMP
     except ValueError:
-        await update.message.reply_text("❌ Please enter a number only.")
+        await update.message.reply_text("❌ Please enter a number.")
         return INDOOR_TEMP
 
 async def outdoor_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -50,8 +45,7 @@ async def outdoor_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def area_walls(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['area_walls'] = float(update.message.text)
-    await update.message.reply_text("🔢 U-value of walls?", 
-                                  reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
+    await update.message.reply_text("🔢 U-value of walls?", reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
     return U_WALLS
 
 async def u_walls(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -61,8 +55,7 @@ async def u_walls(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def area_windows(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['area_windows'] = float(update.message.text)
-    await update.message.reply_text("🔢 U-value of windows?", 
-                                  reply_markup=ReplyKeyboardMarkup([["0.25", "0.35", "0.50"]], one_time_keyboard=True))
+    await update.message.reply_text("🔢 U-value of windows?", reply_markup=ReplyKeyboardMarkup([["0.25", "0.35", "0.50"]], one_time_keyboard=True))
     return U_WINDOWS
 
 async def u_windows(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,19 +65,17 @@ async def u_windows(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def area_roof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['area_roof'] = float(update.message.text)
-    await update.message.reply_text("🔢 U-value of roof?", 
-                                  reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True))
+    await update.message.reply_text("🔢 U-value of roof?", reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True))
     return U_ROOF
 
 async def u_roof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['u_roof'] = float(update.message.text)
-    await update.message.reply_text("📦 Room volume (cubic ft)?\n(Length × Width × Height)")
+    await update.message.reply_text("📦 Room volume (cubic ft)?")
     return VOLUME
 
 async def volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['volume'] = float(update.message.text)
-    await update.message.reply_text("🔄 Air changes per hour (ACH)?", 
-                                  reply_markup=ReplyKeyboardMarkup(ACH_KEYBOARD, one_time_keyboard=True))
+    await update.message.reply_text("🔄 Air changes per hour (ACH)?", reply_markup=ReplyKeyboardMarkup(ACH_KEYBOARD, one_time_keyboard=True))
     return ACH
 
 async def ach(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -100,22 +91,31 @@ async def occupants(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if "Heating" in mode:
         result = calculate_heating_load(data)
-        text = f"🔥 **HEATING LOAD RESULTS**\n\n" \
-               f"**Total Heat Loss:** {result['total_btu_hr']} BTU/hr\n" \
-               f"**Recommended Airflow:** {result['cfm']} CFM"
+        text = f"🔥 **HEATING LOAD RESULTS**\n\n**Total:** {result['total_btu_hr']} BTU/hr\n**Airflow:** {result['cfm']} CFM"
     else:
         result = calculate_cooling_load(data)
-        text = f"❄️ **COOLING LOAD RESULTS**\n\n" \
-               f"**Total Cooling Load:** {result['total_btu_hr']} BTU/hr\n" \
-               f"**({result['tons']} Tons)**\n" \
-               f"**Supply Airflow:** {result['cfm']} CFM"
+        text = f"❄️ **COOLING LOAD RESULTS**\n\n**Total:** {result['total_btu_hr']} BTU/hr ({result['tons']} Tons)\n**Airflow:** {result['cfm']} CFM"
 
     await update.message.reply_text(text, parse_mode='Markdown')
-    await update.message.reply_text("✅ Calculation complete!\nType /start for a new calculation.")
+
+    # Generate and send PDF
+    try:
+        pdf_file = generate_pdf_report(data, result, mode)
+        with open(pdf_file, 'rb') as f:
+            await update.message.reply_document(
+                document=f,
+                filename=pdf_file,
+                caption="📄 HVAC Calculation Report"
+            )
+        os.remove(pdf_file)  # Clean up
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ PDF generation failed: {str(e)}")
+
+    await update.message.reply_text("✅ Done! Type /start for a new calculation.")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Calculation cancelled.\nType /start to begin again.")
+    await update.message.reply_text("❌ Cancelled. Type /start to begin again.")
     return ConversationHandler.END
 
 def main():
@@ -143,7 +143,7 @@ def main():
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler('start', start))
 
-    print("✅ HVAC Bot is running with improved keyboards!")
+    print("✅ HVAC Bot with PDF Reports is running!")
     app.run_polling()
 
 if __name__ == '__main__':
