@@ -26,16 +26,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def mode_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data['mode'] = update.message.text
-    await update.message.reply_text(
-        "🏠 Indoor design temperature (°F)?\nExample: 75",
-        reply_markup=ReplyKeyboardRemove()
-    )
+    await update.message.reply_text("🏠 Indoor design temperature (°F)?\nExample: 75", reply_markup=ReplyKeyboardRemove())
     return INDOOR_TEMP
 
 async def indoor_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         context.user_data['t_indoor'] = float(update.message.text)
-        await update.message.reply_text("🌡️ Outdoor temperature (°F)?\nExample: 95")
+        await update.message.reply_text("🌡️ Outdoor temperature (°F)?")
         return OUTDOOR_TEMP
     except ValueError:
         await update.message.reply_text("❌ Please enter a number only.")
@@ -48,8 +45,7 @@ async def outdoor_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def area_walls(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['area_walls'] = float(update.message.text)
-    await update.message.reply_text("🔢 U-value of walls?", 
-                                  reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
+    await update.message.reply_text("🔢 U-value of walls?", reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
     return U_WALLS
 
 async def u_walls(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,8 +55,7 @@ async def u_walls(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def area_windows(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['area_windows'] = float(update.message.text)
-    await update.message.reply_text("🔢 U-value of windows?", 
-                                  reply_markup=ReplyKeyboardMarkup([["0.25", "0.35", "0.50"]], one_time_keyboard=True, resize_keyboard=True))
+    await update.message.reply_text("🔢 U-value of windows?", reply_markup=ReplyKeyboardMarkup([["0.25", "0.35", "0.50"]], one_time_keyboard=True, resize_keyboard=True))
     return U_WINDOWS
 
 async def u_windows(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,8 +65,7 @@ async def u_windows(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def area_roof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['area_roof'] = float(update.message.text)
-    await update.message.reply_text("🔢 U-value of roof?", 
-                                  reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
+    await update.message.reply_text("🔢 U-value of roof?", reply_markup=ReplyKeyboardMarkup(U_VALUE_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
     return U_ROOF
 
 async def u_roof(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -81,8 +75,7 @@ async def u_roof(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['volume'] = float(update.message.text)
-    await update.message.reply_text("🔄 Air changes per hour (ACH)?", 
-                                  reply_markup=ReplyKeyboardMarkup(ACH_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
+    await update.message.reply_text("🔄 Air changes per hour (ACH)?", reply_markup=ReplyKeyboardMarkup(ACH_KEYBOARD, one_time_keyboard=True, resize_keyboard=True))
     return ACH
 
 async def ach(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -105,16 +98,23 @@ async def occupants(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text, parse_mode='Markdown')
 
-    # PDF Report
+    # === IMPROVED PDF SECTION ===
     try:
         pdf_file = generate_pdf_report(data, result, mode)
         with open(pdf_file, 'rb') as f:
-            await update.message.reply_document(document=f, filename=pdf_file, caption="📄 HVAC Report PDF")
+            await update.message.reply_document(
+                document=f,
+                filename=pdf_file,
+                caption="📄 HVAC Calculation Report"
+            )
         os.remove(pdf_file)
+        await update.message.reply_text("✅ PDF Report sent successfully!")
     except Exception as e:
-        await update.message.reply_text("⚠️ Could not generate PDF.")
+        error_msg = str(e)
+        await update.message.reply_text(f"⚠️ PDF Error: {error_msg[:200]}")
+        await update.message.reply_text("✅ But your text results are above!")
 
-    await update.message.reply_text("✅ Done! Type /start for a new calculation.")
+    await update.message.reply_text("Type /start for a new calculation.")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,7 +146,7 @@ def main():
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler('start', start))
 
-    print("✅ Bot restarted - Full version running")
+    print("✅ Bot running with detailed PDF error reporting")
     app.run_polling()
 
 if __name__ == '__main__':
