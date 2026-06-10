@@ -42,7 +42,7 @@ def calculate_cooling_load(data: dict) -> dict:
 
 
 def generate_pdf_report(data: dict, result: dict, mode: str) -> str:
-    """Clean PDF without emojis"""
+    """Super clean PDF - no emojis at all"""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
@@ -51,7 +51,7 @@ def generate_pdf_report(data: dict, result: dict, mode: str) -> str:
 
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
-    pdf.cell(0, 8, f"Type: {mode}", ln=True)
+    pdf.cell(0, 8, f"Calculation Type: {mode}", ln=True)
     pdf.ln(10)
 
     pdf.set_font("Arial", "B", 12)
@@ -59,7 +59,8 @@ def generate_pdf_report(data: dict, result: dict, mode: str) -> str:
     pdf.set_font("Arial", "", 11)
     for key, value in data.items():
         if key != "mode":
-            pdf.cell(0, 6, f"• {key.replace('_', ' ').title()}: {value}", ln=True)
+            nice_key = key.replace('_', ' ').title()
+            pdf.cell(0, 6, f"• {nice_key}: {value}", ln=True)
 
     pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
