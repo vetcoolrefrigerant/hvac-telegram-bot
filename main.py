@@ -29,13 +29,15 @@ async def mode_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🏠 Indoor design temperature (°F)?\nExample: 75", reply_markup=ReplyKeyboardRemove())
     return INDOOR_TEMP
 
+# ==================== FIXED HANDLERS ====================
+
 async def indoor_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         context.user_data['t_indoor'] = float(update.message.text)
         await update.message.reply_text("🌡️ Outdoor temperature (°F)?")
         return OUTDOOR_TEMP
-    except ValueError:
-        await update.message.reply_text("❌ Please enter a number only.")
+    except:
+        await update.message.reply_text("❌ Please enter a number.")
         return INDOOR_TEMP
 
 async def outdoor_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,9 +81,13 @@ async def volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ACH
 
 async def ach(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['ach'] = float(update.message.text)
-    await update.message.reply_text("👥 Number of occupants?")
-    return OCCUPANTS
+    try:
+        context.user_data['ach'] = float(update.message.text)
+        await update.message.reply_text("👥 Number of occupants?")
+        return OCCUPANTS
+    except:
+        await update.message.reply_text("❌ Please enter a number.")
+        return ACH
 
 async def occupants(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['occupants'] = int(update.message.text)
@@ -98,27 +104,22 @@ async def occupants(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text, parse_mode='Markdown')
 
-    # === IMPROVED PDF SECTION ===
+    # PDF with error reporting
     try:
         pdf_file = generate_pdf_report(data, result, mode)
         with open(pdf_file, 'rb') as f:
-            await update.message.reply_document(
-                document=f,
-                filename=pdf_file,
-                caption="📄 HVAC Calculation Report"
-            )
+            await update.message.reply_document(document=f, filename=pdf_file, caption="📄 HVAC Calculation Report")
         os.remove(pdf_file)
         await update.message.reply_text("✅ PDF Report sent successfully!")
     except Exception as e:
-        error_msg = str(e)
-        await update.message.reply_text(f"⚠️ PDF Error: {error_msg[:200]}")
-        await update.message.reply_text("✅ But your text results are above!")
+        await update.message.reply_text(f"⚠️ PDF Error: {str(e)[:150]}")
+        await update.message.reply_text("✅ Text results are above.")
 
     await update.message.reply_text("Type /start for a new calculation.")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Cancelled.\nType /start to begin again.")
+    await update.message.reply_text("❌ Cancelled.")
     return ConversationHandler.END
 
 def main():
@@ -146,7 +147,7 @@ def main():
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler('start', start))
 
-    print("✅ Bot running with detailed PDF error reporting")
+    print("✅ Bot restarted with fixed ACH step")
     app.run_polling()
 
 if __name__ == '__main__':
